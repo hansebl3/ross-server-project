@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+.env
+.DS_# Streamlit
+.streamlit
+secrets.toml
+
+# Config (Sensitive)
+src/config.json
+experiments/
+*.log

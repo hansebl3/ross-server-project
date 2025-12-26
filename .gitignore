@@ -1,0 +1,27 @@
+# System
+__pycache__/
+*.pyc
+.DS_Store
+.env
+venv/
+.venv/
+
+# Data Directories (Heavy/Generated)
+chroma_data/
+mariadb_data/
+embed/
+data/
+
+# Sensitive Configuration
+*/src/config.json
+*/llm_config.json
+secrets.toml
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/
