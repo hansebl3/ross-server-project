@@ -1,3 +1,18 @@
+"""
+News Reader Application (Streamlit)
+-----------------------------------
+A comprehensive news aggregation and summarization platform.
+
+Features:
+- **Live Feed**: Fetches RSS feeds from configured sources.
+- **Auto Summarization**: Uses background threads to summarize articles via LLM.
+- **Database**: Caches summaries and stores saved articles in MariaDB.
+- **Secrets**: Securely loads credentials from `.env`.
+
+Modules:
+- `modules.news_manager`: Handles RSS fetching and DB storage.
+- `modules.llm_manager`: Manages LLM providers (Ollama, OpenAI, etc).
+"""
 import streamlit as st
 
 from modules.news_manager import NewsFetcher, NewsDatabase

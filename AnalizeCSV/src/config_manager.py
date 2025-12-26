@@ -1,3 +1,9 @@
+"""
+Configuration Manager for AnalizeCSV
+------------------------------------
+Handles loading and saving of database configurations.
+Prioritizes environment variables (secrets) over local JSON files.
+"""
 import json
 import os
 
@@ -6,15 +12,23 @@ CONFIG_FILE = "db_config.json"
 def load_config():
     """
     설정 파일(db_config.json)을 로드합니다.
-    파일이 존재하지 않거나 에러가 발생하면 빈 딕셔너리를 반환합니다.
+    Loads configuration from `db_config.json`.
+    
+    Security Note:
+    - Overrides sensitive keys (like 'password') with environment variables 
+      (e.g., `ANALIZE_DB_PASSWORD`) if they exist.
     
     Returns:
-        dict: 설정 정보를 담은 딕셔너리
+        dict: 설정 정보를 담은 딕셔너리 (Merged config).
     """
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
+                config = json.load(f)
+            
+            # Env Override
+            config['password'] = os.getenv("ANALIZE_DB_PASSWORD", config.get('password'))
+            return config
         except:
             return {}
     return {}

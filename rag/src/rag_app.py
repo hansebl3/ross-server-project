@@ -578,7 +578,13 @@ with tab4:
         api_key = ""
         if selected_provider not in provider_map: # Only checking for cloud providers not in custom map
             key_name = selected_provider.lower()
-            api_key = llm_config.get("api_keys", {}).get(key_name, "")
+            
+            # Try Env First
+            if key_name == "openai":
+                api_key = os.getenv("OPENAI_API_KEY", "")
+
+            if not api_key:
+                api_key = llm_config.get("api_keys", {}).get(key_name, "")
             if not api_key or api_key.startswith("sk-...") or api_key == "":
                 st.warning(f"⚠️ No valid API Key found for {selected_provider} in llm_config.json")
                 api_key_input = st.text_input("Enter API Key (Temporary)", type="password")

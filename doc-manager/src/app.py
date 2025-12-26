@@ -1,3 +1,20 @@
+"""
+Documentation Manager (Streamlit App)
+-------------------------------------
+Main entry point for the Documentation Manager application.
+This app allows users to upload, process, review, and search documents
+using a combination of MariaDB (metadata) and ChromaDB (embeddings).
+
+Key Features:
+- **Upload**: Ingest PDF/HWP files.
+- **Batch Processing**: Use LLMs to summarize and tag documents.
+- **Search**: Semantic and Keyword search over the knowledge base.
+- **Prompt Lab**: Experiment with LLM prompts.
+
+Configuration:
+- Loads from `.env` (secrets) and `src/config.json` (defaults).
+- Uses `src/utils/config_loader.py` for precedence logic.
+"""
 import streamlit as st
 import subprocess
 from db_manager import DBManager

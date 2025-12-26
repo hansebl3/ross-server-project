@@ -359,7 +359,14 @@ api_key = ""
 api_key = ""
 if selected_provider not in custom_provider_map:
     key_name = selected_provider.lower()
-    api_key = llm_config.get("api_keys", {}).get(key_name, "")
+    
+    # Try Env First
+    if key_name == "openai":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        
+    if not api_key:
+        api_key = llm_config.get("api_keys", {}).get(key_name, "")
+        
     if not api_key:
         api_key = st.sidebar.text_input(f"{selected_provider} API Key", type="password")
 

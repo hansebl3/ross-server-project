@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 
 class NewsDatabase:
     """
+    Manages database interactions for news items and summary caching.
     뉴스 항목 및 요약 캐싱을 위한 데이터베이스 상호 작용을 관리합니다.
     
-    속성:
-        config (dict): 로드된 구성.
-        db_config (dict): 데이터베이스 연결 세부 정보.
+    Attributes:
+        config (dict): Loaded configuration (includes secrets from .env).
+        db_config (dict): Database connection details.
     """
     def __init__(self, config_file='config.json'):
         self.config = self._load_config(config_file)
@@ -27,10 +28,22 @@ class NewsDatabase:
 
     def _load_config(self, config_file):
         """JSON 파일에서 구성을 로드합니다."""
+        config = {}
         if os.path.exists(config_file):
             with open(config_file, 'r') as f:
-                return json.load(f)
-        return {}
+                config = json.load(f)
+        
+        # Override with Environment Variables (Secrets)
+        if 'news_db' not in config:
+            config['news_db'] = {}
+            
+        config['news_db']['password'] = os.getenv('DB_PASSWORD', config['news_db'].get('password'))
+        config['news_db']['user'] = os.getenv('DB_USER', config['news_db'].get('user'))
+        config['news_db']['host'] = os.getenv('DB_HOST', config['news_db'].get('host'))
+        
+        config['openai_api_key'] = os.getenv('OPENAI_API_KEY', config.get('openai_api_key', ''))
+
+        return config
 
     def ensure_table_exists(self):
         """

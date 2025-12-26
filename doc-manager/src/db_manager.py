@@ -11,6 +11,17 @@ from utils.config_loader import load_config
 logger = logging.getLogger(__name__)
 
 class DBManager:
+    """
+    Database Manager for handling MariaDB connections and schema migrations.
+    
+    Responsibilities:
+    1. **Connection Pooling**: Manages `psycopg2` connection pool (min=1, max=20).
+    2. **Schema Management**: Auto-initializes tables (`documents`, `categories`) and applied migrations.
+    3. **Vector Support**: Enables `pgvector` extension for embedding storage.
+    
+    Configuration:
+    - Reads connection params from `config.json` (overridden by `.env` variables).
+    """
     def __init__(self):
         config = load_config()
         self.conn_params = config['database']

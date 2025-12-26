@@ -193,13 +193,23 @@ class LLMManager:
 
     def get_config(self):
         config_path = "llm_config.json"
+        config = {}
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r") as f:
-                    return json.load(f)
+                    config = json.load(f)
             except Exception as e:
                 logger.error(f"Error loading config: {e}")
-        return {}
+        
+        # Inject Secrets from Env
+        if 'api_keys' not in config:
+            config['api_keys'] = {}
+        
+        env_openai = os.getenv("OPENAI_API_KEY")
+        if env_openai:
+            config['api_keys']['openai'] = env_openai
+            
+        return config
 
     def update_config(self, key, value):
         config_path = "llm_config.json"

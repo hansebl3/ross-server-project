@@ -1,3 +1,14 @@
+"""
+Ross Dashboard (Streamlit)
+--------------------------
+Central landing page for the Personal Server Ecosystem.
+Provides quick navigation links to other running services and basic PC control.
+
+Features:
+- **Navigation**: Links to News Reader, CSV Analyzer, RAG Workbench, etc.
+- **PC Control**: WOL (Wake-on-LAN) and SSH reboot controls for network devices.
+- **Monitoring**: Displays system status (via `pc_control` module).
+"""
 import streamlit as st
 from pc_control import PCControl
 import json
