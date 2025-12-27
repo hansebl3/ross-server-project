@@ -15,9 +15,9 @@ def load_config():
     if 'news_db' not in config:
         config['news_db'] = {}
         
-    config['news_db']['password'] = os.getenv('DB_PASSWORD', config['news_db'].get('password'))
-    config['news_db']['user'] = os.getenv('DB_USER', config['news_db'].get('user'))
-    config['news_db']['host'] = os.getenv('DB_HOST', config['news_db'].get('host'))
+    config['news_db']['password'] = os.getenv('MARIADB_PASSWORD', config['news_db'].get('password'))
+    config['news_db']['user'] = os.getenv('MARIADB_USER', config['news_db'].get('user'))
+    config['news_db']['host'] = os.getenv('MARIADB_HOST', config['news_db'].get('host'))
     
     return config
 

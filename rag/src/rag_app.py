@@ -117,16 +117,16 @@ def call_gemini_api_non_stream(model, messages, api_key):
 
 
 # MariaDB Config
-DB_HOST = os.getenv("DB_HOST", "172.17.0.4") # Direct Container IP (Bridge Network)
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME", "rag_diary_db")
+MARIADB_HOST = os.getenv("MARIADB_HOST", "172.17.0.4") # Direct Container IP (Bridge Network)
+MARIADB_USER = os.getenv("MARIADB_USER", "root")
+MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
+MARIADB_DB = os.getenv("MARIADB_DB", "rag_diary_db")
 
 def get_full_document_from_mariadb(table_name, source_id):
     """Fetches the full content from MariaDB using the source ID."""
     try:
         conn = pymysql.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+            host=MARIADB_HOST, user=MARIADB_USER, password=MARIADB_PASSWORD, database=MARIADB_DB,
             charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5
         )

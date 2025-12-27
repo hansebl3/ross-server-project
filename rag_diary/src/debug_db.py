@@ -2,17 +2,17 @@ import pymysql
 import os
 
 # DB Config
-DB_HOST = "127.0.0.1"
-DB_USER = "root"
-DB_PASSWORD = os.getenv("DB_PASSWORD", "your_password_here")
-DB_NAME = "rag_diary_db"
+MARIADB_HOST = "127.0.0.1"
+MARIADB_USER = "root"
+MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD", "your_password_here")
+MARIADB_DB = "rag_diary_db"
 TARGET_UUID = "615141d2-4c7e-4f38-bd8d-739f4eb0d782"
 
 def debug_mariadb():
-    print(f"🔌 Connecting to MariaDB {DB_NAME}...")
+    print(f"🔌 Connecting to MariaDB {MARIADB_DB}...")
     try:
         conn = pymysql.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME,
+            host=MARIADB_HOST, user=MARIADB_USER, password=MARIADB_PASSWORD, database=MARIADB_DB,
             charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
         )
         with conn.cursor() as cursor:

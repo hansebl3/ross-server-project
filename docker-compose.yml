@@ -21,6 +21,10 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Seoul
+      - MARIADB_HOST=${MARIADB_HOST}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DB=${MARIADB_DB}
 
   # ----------------------------------------------------------------
   # 2. Analize CSV (Port 8502)
@@ -52,6 +56,10 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Seoul
+      - MARIADB_HOST=${MARIADB_HOST}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DB=${MARIADB_DB}
 
   # ----------------------------------------------------------------
   # 4. RAG Workbench (Port 8504)
@@ -68,10 +76,11 @@ services:
     environment:
       - TZ=Asia/Seoul
       # Database connection settings (Connects to local 'mariadb' service)
-      - DB_HOST=${DB_HOST}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
+      # Database connection settings (Connects to local 'mariadb' service)
+      - MARIADB_HOST=${MARIADB_HOST}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DB=${MARIADB_DB}
       - CHROMA_HOST=${CHROMA_HOST}
       - CHROMA_PORT=${CHROMA_PORT}
 
@@ -86,11 +95,11 @@ services:
     volumes:
       - ./rag_diary:/app
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - MARIADB_HOST=${MARIADB_HOST}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DB=${MARIADB_DB}
+      - LLM_BASE_URL=${LLM_BASE_URL}
       - CHROMA_HOST=${CHROMA_HOST}
       - CHROMA_PORT=${CHROMA_PORT}
       - TZ=Asia/Seoul
@@ -106,8 +115,8 @@ services:
     container_name: ross-mariadb
     network_mode: "host"
     environment:
-      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
-      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MARIADB_DB}
       - TZ=Asia/Seoul
     volumes:
       - mariadb_data:/var/lib/mysql

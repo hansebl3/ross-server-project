@@ -13,18 +13,18 @@ import os
 import streamlit as st
 import category_config
 
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME", "rag_diary_db")
+MARIADB_HOST = os.getenv("MARIADB_HOST", "127.0.0.1")
+MARIADB_USER = os.getenv("MARIADB_USER", "root")
+MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
+MARIADB_DB = os.getenv("MARIADB_DB", "rag_diary_db")
 
 def get_db_connection():
     """Establishes a connection to the MariaDB database."""
     try:
         connection = pymysql.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
+            host=MARIADB_HOST,
+            user=MARIADB_USER,
+            password=MARIADB_PASSWORD,
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )
@@ -40,8 +40,8 @@ def init_db():
         try:
             with conn.cursor() as cursor:
                 # Create Database if not exists
-                cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
-                cursor.execute(f"USE {DB_NAME}")
+                cursor.execute(f"CREATE DATABASE IF NOT EXISTS {MARIADB_DB}")
+                cursor.execute(f"USE {MARIADB_DB}")
                 
                 # Iterate through all categories and create their specific tables
                 for cat_key, config in category_config.CATEGORY_CONFIG.items():
@@ -75,7 +75,7 @@ def save_to_mariadb(table_name, data_dict):
     if conn:
         try:
             with conn.cursor() as cursor:
-                cursor.execute(f"USE {DB_NAME}")
+                cursor.execute(f"USE {MARIADB_DB}")
                 
                 # Dynamic Insert Construction
                 

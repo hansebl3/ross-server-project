@@ -5,10 +5,10 @@ import db_utils
 import chromadb
 
 # DB Config (matching docker-compose/app env)
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME", "rag_diary_db")
+MARIADB_HOST = os.getenv("MARIADB_HOST", "127.0.0.1")
+MARIADB_USER = os.getenv("MARIADB_USER", "root")
+MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
+MARIADB_DB = os.getenv("MARIADB_DB", "rag_diary_db")
 
 # Chroma Config
 CHROMA_HOST = os.getenv("CHROMA_HOST", "100.65.53.9")
@@ -18,13 +18,13 @@ def reset_schema():
     print("=== 🛠️ RAG Diary System Reset Tool 🛠️ ===")
     
     # 1. MariaDB Reset
-    print(f"\n[1/3] 🔌 Connecting to MariaDB ({DB_NAME})...")
+    print(f"\n[1/3] 🔌 Connecting to MariaDB ({MARIADB_DB})...")
     try:
         conn = pymysql.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, charset='utf8mb4'
+            host=MARIADB_HOST, user=MARIADB_USER, password=MARIADB_PASSWORD, charset='utf8mb4'
         )
         with conn.cursor() as cursor:
-            cursor.execute(f"USE {DB_NAME}")
+            cursor.execute(f"USE {MARIADB_DB}")
             
             # Drop Legacy Tables
             LEGACY_TABLES = ["tb_factory_manuals", "tb_personal_diaries", "tb_dev_logs", "tb_ideas"]

@@ -7,6 +7,7 @@ import uuid
 import json
 from contextlib import contextmanager
 from utils.config_loader import load_config
+from utils.worker_manager import ensure_worker_running
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +117,22 @@ class DBManager:
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS processing_tasks (
                             doc_id UUID PRIMARY KEY,
-                            status TEXT DEFAULT 'created', -- created, queued, processing, done, failed
-                            config JSONB DEFAULT '{}'::jsonb, -- prompts, models
-                            results JSONB DEFAULT '{}'::jsonb, -- partial or full results
+                            status TEXT DEFAULT 'created', 
+                            config JSONB DEFAULT '{}'::jsonb, 
+                            results JSONB DEFAULT '{}'::jsonb,
+                            results_model_l JSONB,
+                            results_model_r JSONB,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
                     """)
+                    
+                    # Migration: Add results_model_l/r if they don't exist
+                    try:
+                        cur.execute("ALTER TABLE processing_tasks ADD COLUMN IF NOT EXISTS results_model_l JSONB;")
+                        cur.execute("ALTER TABLE processing_tasks ADD COLUMN IF NOT EXISTS results_model_r JSONB;")
+                    except:
+                        pass
                     
                     # Create prompts table (Prompt Lab)
                     cur.execute("""
@@ -422,40 +432,41 @@ class DBManager:
                             updated_at = CURRENT_TIMESTAMP;
                     """, (doc_id, Json(config or {})))
                 conn.commit()
+                # Trigger worker check/start
+                ensure_worker_running()
                 return True
             except Exception as e:
                 logger.error(f"Error enqueueing task: {e}")
                 conn.rollback()
                 return False
 
-    def update_task(self, doc_id, status=None, results=None, config=None):
+    def update_task(self, doc_id, status=None, results=None, config=None, results_l=None, results_r=None):
+        sql = "UPDATE processing_tasks SET updated_at = CURRENT_TIMESTAMP"
+        params = []
+        
+        if status:
+            sql += ", status = %s"
+            params.append(status)
+        if results:
+            sql += ", results = %s"
+            params.append(Json(results))
+        if config:
+            sql += ", config = %s"
+            params.append(Json(config))
+        if results_l:
+            sql += ", results_model_l = %s"
+            params.append(Json(results_l))
+        if results_r:
+            sql += ", results_model_r = %s"
+            params.append(Json(results_r))
+            
+        sql += " WHERE doc_id = %s"
+        params.append(str(doc_id))
+        
         with self.get_conn() as conn:
-            try:
-                with conn.cursor() as cur:
-                    sql = "UPDATE processing_tasks SET updated_at = CURRENT_TIMESTAMP"
-                    params = []
-                    
-                    if status:
-                        sql += ", status = %s"
-                        params.append(status)
-                    if results:
-                        sql += ", results = %s"
-                        params.append(Json(results))
-                    if config:
-                        sql += ", config = %s"
-                        params.append(Json(config))
-                    
-                    sql += " WHERE doc_id = %s"
-                    params.append(doc_id)
-                    
-                    cur.execute(sql, params)
-                conn.commit()
-                return True
-            except Exception as e:
-                logger.error(f"Error updating task: {e}")
-                conn.rollback()
-                return False
-
+            with conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+            conn.commit()
     def get_tasks_by_status(self, status):
         with self.get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:

@@ -22,14 +22,25 @@ def render_review_tab():
                                      format_func=lambda x: get_name(next(item for item in done_tasks if item["doc_id"] == x)))
         
         current_task = next(t for t in done_tasks if t['doc_id'] == selected_task_id)
-        res = current_task['results']
+        
+        # Parse L/R results from their dedicated columns (or fallback to empty defaults)
+        res_l = current_task.get('results_model_l') or {}
+        res_r = current_task.get('results_model_r') or {}
+        
+        # Extract metadata parts safely
+        meta_l = res_l.get('metadata', {}) or {}
+        meta_r = res_r.get('metadata', {}) or {}
+        
+        # Extract summaries
+        sum_l = res_l.get('summary', "") or "*No Left Model Summary*"
+        sum_r = res_r.get('summary', "") or "*No Right Model Summary*"
         
         st.info(f"Reviewing: {get_name(current_task)}")
         
         # 1. Keywords Cross-Selection
         st.subheader("1. Keywords & Metadata")
-        kw_l = res['meta_l'].get("keywords", [])
-        kw_r = res['meta_r'].get("keywords", [])
+        kw_l = meta_l.get("keywords", [])
+        kw_r = meta_r.get("keywords", [])
         
         # Smart Deduplication
         def normalize_kw(s):
@@ -64,16 +75,16 @@ def render_review_tab():
         with col_l:
             st.markdown(f"**Left Model ({current_task['config'].get('model_l')})**")
             with st.container(border=True): # Add a border for visual clarity
-                st.markdown(res['sum_l'])
+                st.markdown(sum_l)
             
         with col_r:
             st.markdown(f"**Right Model ({current_task['config'].get('model_r')})**")
             with st.container(border=True):
-                st.markdown(res['sum_r'])
+                st.markdown(sum_r)
 
         # Choice
         choice = st.radio("Choose Base Summary", ["Left Model", "Right Model"], horizontal=True)
-        base_text = res['sum_l'] if choice == "Left Model" else res['sum_r']
+        base_text = sum_l if choice == "Left Model" else sum_r
         
         st.divider()
         
@@ -85,7 +96,7 @@ def render_review_tab():
         parent_title = existing_doc.get('title', 'Document') if existing_doc else 'Document'
         
         # Recommendation Logic: Use AI title if available, otherwise L1_ + first 30 chars of summary
-        ai_recommended_title = res['meta_l'].get("title") or res['meta_r'].get("title")
+        ai_recommended_title = meta_l.get("title") or meta_r.get("title")
         if ai_recommended_title and ai_recommended_title != "unknown":
             # User request: Do not truncate AI title
             suggested_l1_title = f"L1_{ai_recommended_title}"

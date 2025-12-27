@@ -46,19 +46,31 @@ class LLMClient:
         url = f"{self.base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
         # Expecting JSON response
-        full_prompt = f"{prompt_template}\n\nContent:\n{content}\n\nReturn ONLY a JSON object with 'keywords' (list of strings) and 'title' (a short, descriptive title as a string. MANDATORY: ALWAYS GENERATE A TITLE)."
+        full_prompt = (
+            f"{prompt_template}\n\n"
+            f"Content:\n{content}\n\n"
+            "Produce a valid JSON object. Do not include markdown or explanations.\n"
+            "Format: {\"keywords\": [\"word1\", \"word2\"], \"title\": \"Descriptive Title\"}"
+        )
+        
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": full_prompt}],
             "temperature": 0.1,
-            "response_format": {"type": "json_object"},
             "max_tokens": 1024
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            logger.info(f"Extracting metadata with timeout=1200 for model {model} (JSON mode: OFF)")
+            response = requests.post(url, headers=headers, json=payload, timeout=1200)
             response.raise_for_status()
-            data = response.json()
-            return json.loads(data['choices'][0]['message']['content'])
+            
+            # Robust JSON extraction
+            import re
+            raw_content = response.json()['choices'][0]['message']['content']
+            json_match = re.search(r'\{.*\}', raw_content, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            return {"keywords": [], "title": "unknown"}
         except requests.exceptions.HTTPError as he:
             if he.response.status_code in [429, 503]:
                 raise RetryableLLMError(f"LLM Busy (Status {he.response.status_code})")

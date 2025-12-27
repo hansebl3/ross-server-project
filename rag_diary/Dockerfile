@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Environment variables will be overridden by docker-compose
-ENV OLLAMA_BASE_URL="http://100.65.53.9:11434"
-ENV DB_HOST="127.0.0.1"
+ENV LLM_BASE_URL="http://100.65.53.9:11434"
+ENV MARIADB_HOST="127.0.0.1"
 
 # Command to run the app
 CMD ["streamlit", "run", "src/app.py", "--server.port", "8510", "--server.address", "0.0.0.0"]

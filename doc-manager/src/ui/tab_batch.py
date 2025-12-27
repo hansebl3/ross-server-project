@@ -15,19 +15,32 @@ def render_batch_tab():
 
     # Fetch all relevant statuses
     tasks_created = st.session_state.db.get_tasks_by_status('created')
-    tasks_queued = st.session_state.db.get_tasks_by_status('queued')
-    tasks_active = st.session_state.db.get_tasks_by_status('processing')
+    
+    # Queue 1
+    tasks_q1_wait = st.session_state.db.get_tasks_by_status('queued')
+    tasks_q1_proc = st.session_state.db.get_tasks_by_status('processing_l')
+    
+    # Queue 2
+    tasks_q2_wait = st.session_state.db.get_tasks_by_status('queued_r')
+    tasks_q2_proc = st.session_state.db.get_tasks_by_status('processing_r')
+    
+    # Legacy fallbacks (just in case)
+    tasks_legacy_proc = st.session_state.db.get_tasks_by_status('processing')
 
     # Metrics
     m1, m2, m3 = st.columns(3)
     m1.metric("1. Pending Config", len(tasks_created), help="Files uploaded but not yet configured for LLM.")
-    m2.metric("2. Waiting in Queue", len(tasks_queued), help="Files queued and waiting for the background worker.")
-    m3.metric("3. Processing Now", len(tasks_active), help="Files currently being processed by LLM.")
+    
+    q1_total = len(tasks_q1_wait) + len(tasks_q1_proc)
+    m2.metric("2. Queue 1 (Left)", f"{len(tasks_q1_proc)} / {q1_total}", help="Processing / Total (Wait + Proc)")
+    
+    q2_total = len(tasks_q2_wait) + len(tasks_q2_proc)
+    m3.metric("3. Queue 2 (Right)", f"{len(tasks_q2_proc)} / {q2_total}", help="Processing / Total (Wait + Proc)")
 
     st.divider()
     
     # Detailed Lists (Expanders)
-    if tasks_created or tasks_queued or tasks_active:
+    if tasks_created or q1_total > 0 or q2_total > 0 or tasks_legacy_proc:
         with st.expander("📂 Show Detailed Queue Lists", expanded=True):
             cols_list = st.columns(3)
             
@@ -41,22 +54,38 @@ def render_batch_tab():
                     st.caption("(Empty)")
 
             with cols_list[1]:
-                st.markdown("**Waiting in Queue**")
-                if tasks_queued:
-                    for t in tasks_queued:
-                        fname = t['config'].get('filename', str(t['doc_id']))
-                        st.caption(f"- {fname}")
-                else:
-                    st.caption("(Empty)")
-                    
-            with cols_list[2]:
-                st.markdown("**Processing**")
-                if tasks_active:
-                    for t in tasks_active:
+                st.markdown("**Queue 1 (Left Model)**")
+                if tasks_q1_proc:
+                    st.caption(f"**Processing ({len(tasks_q1_proc)}):**")
+                    for t in tasks_q1_proc:
                         fname = t['config'].get('filename', str(t['doc_id']))
                         st.text(f"▶ {fname}")
-                else:
-                    st.caption("(Idle)")
+                
+                if tasks_q1_wait:
+                    st.caption(f"**Waiting ({len(tasks_q1_wait)}):**")
+                    for t in tasks_q1_wait:
+                        fname = t['config'].get('filename', str(t['doc_id']))
+                        st.caption(f"- {fname}")
+                
+                if not tasks_q1_proc and not tasks_q1_wait:
+                     st.caption("(Empty)")
+
+            with cols_list[2]:
+                st.markdown("**Queue 2 (Right Model)**")
+                if tasks_q2_proc:
+                    st.caption(f"**Processing ({len(tasks_q2_proc)}):**")
+                    for t in tasks_q2_proc:
+                        fname = t['config'].get('filename', str(t['doc_id']))
+                        st.text(f"▶ {fname}")
+                
+                if tasks_q2_wait:
+                    st.caption(f"**Waiting ({len(tasks_q2_wait)}):**")
+                    for t in tasks_q2_wait:
+                        fname = t['config'].get('filename', str(t['doc_id']))
+                        st.caption(f"- {fname}")
+
+                if not tasks_q2_proc and not tasks_q2_wait:
+                     st.caption("(Empty)")
     
     st.divider()
 

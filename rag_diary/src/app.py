@@ -30,7 +30,7 @@ import db_utils
 import category_config # Import the new config 
 
 # --- Configuration ---
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.65.53.9:11434")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://100.65.53.9:11434")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "100.65.53.9")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8001))
 EMBEDDING_MODEL_NAME = "jhgan/ko-sroberta-multitask"
@@ -184,7 +184,7 @@ def analyze_log_content(text, model_name, config, provider, api_key=None, custom
                 "stream": False,
                 "format": "json" # Request JSON output mode if supported
             }
-            url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+            url = f"{LLM_BASE_URL.rstrip('/')}/api/chat"
             response = requests.post(url, json=payload, timeout=60)
             if response.status_code == 200:
                 result = response.json()
