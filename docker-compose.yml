@@ -41,10 +41,16 @@ services:
     network_mode: "host"
     volumes:
       - ./AnalizeCSV:/app
+      - ./shared:/app/shared
     command: [ "streamlit", "run", "src/app.py", "--server.port=8502", "--server.address=0.0.0.0" ]
     restart: unless-stopped
     environment:
       - TZ=Asia/Seoul
+      - PYTHONPATH=/app
+      - MARIADB_HOST=${MARIADB_HOST}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DB=${MARIADB_DB}
 
   # ----------------------------------------------------------------
   # 3. News Reader (Port 8503)
@@ -59,9 +65,11 @@ services:
     volumes:
       - ./news-reader:/app
       - ~/.ssh:/root/.ssh:ro
+      - ./shared:/app/shared
     restart: unless-stopped
     environment:
       - TZ=Asia/Seoul
+      - PYTHONPATH=/app
       - MARIADB_HOST=${MARIADB_HOST}
       - MARIADB_USER=${MARIADB_USER}
       - MARIADB_PASSWORD=${MARIADB_PASSWORD}
@@ -80,8 +88,10 @@ services:
     network_mode: "host"
     volumes:
       - ./rag:/app
+      - ./shared:/app/shared
     restart: unless-stopped
     environment:
+      - PYTHONPATH=/app
       - TZ=Asia/Seoul
       # Database connection settings (Connects to local 'mariadb' service)
       # Database connection settings (Connects to local 'mariadb' service)
@@ -104,7 +114,9 @@ services:
     network_mode: "host"
     volumes:
       - ./rag_diary:/app
+      - ./shared:/app/shared
     environment:
+      - PYTHONPATH=/app
       - MARIADB_HOST=${MARIADB_HOST}
       - MARIADB_USER=${MARIADB_USER}
       - MARIADB_PASSWORD=${MARIADB_PASSWORD}
@@ -160,8 +172,10 @@ services:
     volumes:
       - ./doc-manager:/app
       - ./embed:/app/embed
+      - ./shared:/app/shared
     restart: unless-stopped
     environment:
+      - PYTHONPATH=/app
       - TZ=Asia/Seoul
 
 volumes:

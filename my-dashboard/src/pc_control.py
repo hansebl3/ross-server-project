@@ -18,9 +18,13 @@ class PCControl:
         
         # 세션 상태 키 (최적화용 - 페이지 리로드시 초기화됨)
         self.key_last_check = f"{self.name}_last_check"
-        self.key_last_check = f"{self.name}_last_check"
+
+
         self.key_last_status = f"{self.name}_last_status"
-        self.key_confirm_off = f"{self.name}_confirm_off"
+        self.key_shutdown_clicks = f"{self.name}_shutdown_clicks"
+        self.key_shutdown_start = f"{self.name}_shutdown_start"
+        self.key_boot_clicks = f"{self.name}_boot_clicks"
+        self.key_boot_start = f"{self.name}_boot_start"
         self.key_confirm_ai_stop = f"{self.name}_confirm_ai_stop"
 
     @staticmethod
@@ -297,8 +301,12 @@ class PCControl:
         if self.key_last_check not in st.session_state:
             st.session_state[self.key_last_check] = 0
             st.session_state[self.key_last_status] = "OFFLINE" # Default to string status
-        if self.key_confirm_off not in st.session_state:
-            st.session_state[self.key_confirm_off] = False
+        if self.key_shutdown_clicks not in st.session_state:
+            st.session_state[self.key_shutdown_clicks] = 0
+            st.session_state[self.key_shutdown_start] = 0
+        if self.key_boot_clicks not in st.session_state:
+            st.session_state[self.key_boot_clicks] = 0
+            st.session_state[self.key_boot_start] = 0
 
 
         now = time.time()
@@ -401,91 +409,45 @@ class PCControl:
             btn_type = "primary" if is_online else "secondary"
             
             # 확인 상태가 아니면 "Power OFF" 버튼 표시
-            if not st.session_state.get(self.key_confirm_off, False):
-                if st.button(f'🛑 Power OFF (SSH)', key=f"{self.name}_off", type=btn_type, use_container_width=True, disabled=is_disabled):
-                    if is_online:
-                        st.session_state[self.key_confirm_off] = True
-                        st.rerun()
-                    else:
-                        st.warning("Device is already offline.")
-            else:
-                # 확인 상태이면 "Yes/No" 버튼 표시
-                st.markdown("⚠️ **Shutdown?**")
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("✅ Yes", key=f"{self.name}_yes_off", type="primary", use_container_width=True):
-                         try:
-                            # SSH 종료 (Shutdown)
-                            # SSH 키 파일 경로 확인 (여러 경로 시도)
-                            ssh_key_paths = [
-                                os.path.expanduser('~/.ssh/id_ed25519'),
-                                os.path.expanduser('~/.ssh/id_rsa'),
-                                os.path.expanduser('~/.ssh/id_ecdsa'),
-                            ]
-                            
-                            ssh_key = None
-                            for key_path in ssh_key_paths:
-                                if os.path.exists(key_path) and os.access(key_path, os.R_OK):
-                                    ssh_key = key_path
-                                    break
-                            
-                            
-                            cmd = [
-                                'ssh', 
-                                '-o', 'StrictHostKeyChecking=no', 
-                                '-o', 'UserKnownHostsFile=/dev/null',
-                                '-o', 'ConnectTimeout=5',
-                            ]
-                            
-                            # Windows일 경우 -t 옵션 제외 (필요 없음), Ubuntu일 경우 sudo를 위해 -t (tty) 필요
-                            if status == "UBUNTU":
-                                cmd.append('-t')
+            # Triple Click Logic Implementation
+            
+            def on_off_click():
+                status = st.session_state.get(self.key_last_status, "OFFLINE")
+                
+                if status == "OFFLINE":
+                    st.toast("Device is already offline.", icon="⚠️")
+                    return
 
-                            # SSH 키가 있으면 추가
-                            if ssh_key:
-                                cmd.extend(['-i', ssh_key])
-                            
-                            if status == "WINDOWS":
-                                # Windows Shutdown Command
-                                cmd.extend([
-                                    '-l', self.ssh_user,
-                                    self.host, 
-                                    'shutdown', '/s', '/t', '0'
-                                ])
-                                
-                                subprocess.run(cmd, check=True, capture_output=True, timeout=10)
-                                st.toast("Windows Shutdown Command Sent!")
-                            else:
-                                # Linux Shutdown Command
-                                cmd.extend([
-                                    '-l', self.ssh_user, 
-                                    self.host, 
-                                    'sudo', 'shutdown', '-h', 'now'
-                                ])
-                                
-                                # -t 옵션으로 pseudo-terminal 할당하여 sudo 비밀번호 입력 가능하게 함
-                                # 단, 원격 서버의 sudoers에 NOPASSWD 설정이 필요함
-                                subprocess.run(cmd, check=True, capture_output=True, timeout=10)
-                                st.toast("Linux Shutdown Command Sent!")
+                # Check Triple Click Logic
+                click_count = st.session_state.get(self.key_shutdown_clicks, 0)
+                start_time = st.session_state.get(self.key_shutdown_start, 0)
+                current_time = time.time()
+                
+                # Reset if timeout (3 seconds)
+                if current_time - start_time > 3.0:
+                    click_count = 0
+                    start_time = current_time
+                
+                click_count += 1
+                
+                # Update State
+                st.session_state[self.key_shutdown_clicks] = click_count
+                st.session_state[self.key_shutdown_start] = start_time
+                
+                remaining = 3 - click_count
+                
+                if remaining > 0:
+                    st.toast(f"Click {remaining} more times within 3s to Shutdown!", icon="🕒")
+                else:
+                    # Trigger Shutdown
+                    st.toast("Shutdown Sequence Initiated!", icon="🛑")
+                    self._perform_shutdown(status)
+                    # Reset
+                    st.session_state[self.key_shutdown_clicks] = 0
 
-                            # 공통 종료 처리
-                            # 종료 모드 진입
-                            self._update_state("shutdown", time.time())
-                            # 즉시 상태 체크를 위해 마지막 체크 시간 초기화
-                            st.session_state[self.key_last_check] = 0
-                            # 확인 상태 해제
-                            st.session_state[self.key_confirm_off] = False
-                            st.rerun()
+            st.button(f'🛑 Power OFF (SSH)', key=f"{self.name}_off", type=btn_type, use_container_width=True, disabled=is_disabled, on_click=on_off_click)
 
-                         except subprocess.CalledProcessError as e:
-                            error_msg = e.stderr.decode().strip() if e.stderr else str(e)
-                            st.error(f"Failed: {error_msg}")
-                         except Exception as e:
-                            st.error(f"Failed: {e}")
 
-                with c2:
-                        st.session_state[self.key_confirm_off] = False
-                        st.rerun()
 
         with col3:
             # 켜져있으면 강조(primary), 꺼져있으면 기본(secondary)
@@ -493,92 +455,41 @@ class PCControl:
             is_win_boot_disabled = is_disabled 
             
             btn_type = "primary" if is_online else "secondary"
-            if st.button(f'🪟 Win Boot (SSH)', key=f"{self.name}_win_boot", type=btn_type, use_container_width=True, disabled=is_win_boot_disabled):
-                if is_online:
-                    try:
-                        # SSH공통 로직 (키 찾기 및 명령어 실행)
-                        ssh_key_paths = [
-                            os.path.expanduser('~/.ssh/id_ed25519'),
-                            os.path.expanduser('~/.ssh/id_rsa'),
-                            os.path.expanduser('~/.ssh/id_ecdsa'),
-                        ]
-                        
-                        ssh_key = None
-                        for key_path in ssh_key_paths:
-                            if os.path.exists(key_path) and os.access(key_path, os.R_OK):
-                                ssh_key = key_path
-                                break
-                        
-                        cmd = [
-                            'ssh', 
-                            '-o', 'StrictHostKeyChecking=no', 
-                            '-o', 'UserKnownHostsFile=/dev/null',
-                            '-o', 'ConnectTimeout=5',
-                        ]
-                        
-                         # Windows일 경우 -t 옵션 제외, Ubuntu일 경우 -tt (tty force)
-                        if status == "UBUNTU":
-                            cmd.append('-tt')
+            def on_boot_click():
+                status = st.session_state.get(self.key_last_status, "OFFLINE")
+                
+                if status == "OFFLINE":
+                    st.toast("Device is already offline.", icon="⚠️")
+                    return
 
-                        if ssh_key:
-                            cmd.extend(['-i', ssh_key])
-                        
-                        cmd.extend(['-l', self.ssh_user, self.host])
-
-                        if status == "WINDOWS":
-                            # Windows Reboot Command
-                            cmd.extend(['shutdown', '/r', '/t', '0'])
-                            subprocess.run(cmd, check=True, capture_output=True, timeout=10)
-                            st.toast("Windows Reboot Command Sent!")
-                            
-                            self._update_state("booting_win", time.time())
-                            st.session_state[self.key_last_check] = 0
-                            st.rerun()
-
-                        else: 
-                            # Ubuntu Logic (Grub Reboot)
-                            # 1. Grub Reboot 설정
-                            cmd_grub = cmd + ['sudo', 'grub-reboot', '4']
-                        
-                        # Process execution with pipe handling for cleaner error capture
-                        try:
-                            result = subprocess.run(cmd_grub, check=True, capture_output=True, timeout=10)
-                            st.toast("GRUB entry set for Windows!")
-                        except subprocess.CalledProcessError as e:
-                            error_msg = e.stderr.decode().strip() if e.stderr else str(e)
-                            if "password is required" in error_msg or "sudo: a terminal is required" in error_msg:
-                                st.error("❌ sudo 권한 설정 필요")
-                                st.code(f"echo '{self.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/grub-reboot, /usr/sbin/reboot' | sudo tee /etc/sudoers.d/pc_control", language="bash")
-                                st.info("대상 PC에서 위 명령어를 한 번 실행해주세요.")
-                                return # 더 이상 진행하지 않음
-                            else:
-                                raise e # 다른 에러는 상위로 전파
-
-                        # 2. Reboot 실행
-                        # Reboot 시 연결이 끊겨서 에러가 날 수 있으므로 예외 처리 완화
-                        cmd_reboot = cmd + ['sudo', 'reboot']
-                        try:
-                            subprocess.run(cmd_reboot, check=True, capture_output=True, timeout=10)
-                        except subprocess.CalledProcessError:
-                            # reboot은 성공했지만 연결이 끊어진 경우 무시 (또는 실제 에러일 수도 있음)
-                            pass
-                        except subprocess.TimeoutExpired:
-                            # 타임아웃은 명령이 실행되었음을 의미할 수 있음
-                            pass
-
-                        st.toast("Reboot Command Sent!")
-                        # 종료/재부팅 모드 진입
-                        self._update_state("booting_win", time.time())
-                        st.session_state[self.key_last_check] = 0
-                        st.rerun()
-
-                    except subprocess.CalledProcessError as e:
-                        error_msg = e.stderr.decode().strip() if e.stderr else str(e)
-                        st.error(f"Failed: {error_msg}")
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
+                # Check Triple Click Logic
+                click_count = st.session_state.get(self.key_boot_clicks, 0)
+                start_time = st.session_state.get(self.key_boot_start, 0)
+                current_time = time.time()
+                
+                # Reset if timeout (3 seconds)
+                if current_time - start_time > 3.0:
+                    click_count = 0
+                    start_time = current_time
+                
+                click_count += 1
+                
+                # Update State
+                st.session_state[self.key_boot_clicks] = click_count
+                st.session_state[self.key_boot_start] = start_time
+                
+                remaining = 3 - click_count
+                
+                if remaining > 0:
+                    st.toast(f"Click {remaining} more times within 3s to Boot Windows!", icon="🕒")
                 else:
-                    st.warning("Device is offline.")
+                    # Trigger Boot
+                    st.toast("Reboot Sequence Initiated!", icon="🚀")
+                    self._perform_boot_win(status)
+                    # Reset
+                    st.session_state[self.key_boot_clicks] = 0
+
+            st.button(f'🪟 Win Boot (SSH)', key=f"{self.name}_win_boot", type=btn_type, use_container_width=True, disabled=is_win_boot_disabled, on_click=on_boot_click)
 
         # --- AI Server Control Section (2080linux Only) ---
         if self.name.lower() == "2080linux":
@@ -600,5 +511,155 @@ class PCControl:
             with ai_col3:
                 if st.button("🛑 Stop AI", key=f"{self.name}_ai_stop", use_container_width=True, type="secondary", help="Run ai-stop via SSH", disabled=ai_disabled):
                     self.run_ssh_cmd("ai-stop", status)
+
+    def _perform_shutdown(self, status):
+        try:
+            # SSH 종료 (Shutdown)
+            # SSH 키 파일 경로 확인 (여러 경로 시도)
+            ssh_key_paths = [
+                os.path.expanduser('~/.ssh/id_ed25519'),
+                os.path.expanduser('~/.ssh/id_rsa'),
+                os.path.expanduser('~/.ssh/id_ecdsa'),
+            ]
+            
+            ssh_key = None
+            for key_path in ssh_key_paths:
+                if os.path.exists(key_path) and os.access(key_path, os.R_OK):
+                    ssh_key = key_path
+                    break
+            
+            
+            cmd = [
+                'ssh', 
+                '-o', 'StrictHostKeyChecking=no', 
+                '-o', 'UserKnownHostsFile=/dev/null',
+                '-o', 'ConnectTimeout=5',
+            ]
+            
+            # Windows일 경우 -t 옵션 제외 (필요 없음), Ubuntu일 경우 sudo를 위해 -t (tty) 필요
+            if status == "UBUNTU":
+                cmd.append('-t')
+
+            # SSH 키가 있으면 추가
+            if ssh_key:
+                cmd.extend(['-i', ssh_key])
+            
+            if status == "WINDOWS":
+                # Windows Shutdown Command
+                cmd.extend([
+                    '-l', self.ssh_user,
+                    self.host, 
+                    'shutdown', '/s', '/t', '0'
+                ])
+                
+                subprocess.run(cmd, check=True, capture_output=True, timeout=10)
+                st.toast("Windows Shutdown Command Sent!")
+            else:
+                # Linux Shutdown Command
+                cmd.extend([
+                    '-l', self.ssh_user, 
+                    self.host, 
+                    'sudo', 'shutdown', '-h', 'now'
+                ])
+                
+                subprocess.run(cmd, check=True, capture_output=True, timeout=10)
+                st.toast("Linux Shutdown Command Sent!")
+
+            # 공통 종료 처리
+            # 종료 모드 진입
+            self._update_state("shutdown", time.time())
+            # 즉시 상태 체크를 위해 마지막 체크 시간 초기화
+            st.session_state[self.key_last_check] = 0
+            
+            # 여기서 st.rerun()은 호출하지 않음 (콜백 내부이므로 자연스럽게 UI 갱신됨)
+            # 필요하다면 다음 렌더링 사이클에서 반영됨
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.decode().strip() if e.stderr else str(e)
+            st.error(f"Failed: {error_msg}")
+        except Exception as e:
+            st.error(f"Failed: {e}")
+
+    def _perform_boot_win(self, status):
+        try:
+            # SSH공통 로직 (키 찾기 및 명령어 실행)
+            ssh_key_paths = [
+                os.path.expanduser('~/.ssh/id_ed25519'),
+                os.path.expanduser('~/.ssh/id_rsa'),
+                os.path.expanduser('~/.ssh/id_ecdsa'),
+            ]
+            
+            ssh_key = None
+            for key_path in ssh_key_paths:
+                if os.path.exists(key_path) and os.access(key_path, os.R_OK):
+                    ssh_key = key_path
+                    break
+            
+            cmd = [
+                'ssh', 
+                '-o', 'StrictHostKeyChecking=no', 
+                '-o', 'UserKnownHostsFile=/dev/null',
+                '-o', 'ConnectTimeout=5',
+            ]
+            
+            # Windows일 경우 -t 옵션 제외, Ubuntu일 경우 -tt (tty force)
+            if status == "UBUNTU":
+                cmd.append('-tt')
+
+            if ssh_key:
+                cmd.extend(['-i', ssh_key])
+            
+            cmd.extend(['-l', self.ssh_user, self.host])
+
+            if status == "WINDOWS":
+                # Windows Reboot Command
+                cmd.extend(['shutdown', '/r', '/t', '0'])
+                subprocess.run(cmd, check=True, capture_output=True, timeout=10)
+                st.toast("Windows Reboot Command Sent!")
+                
+                self._update_state("booting_win", time.time())
+                st.session_state[self.key_last_check] = 0
+
+            else: 
+                # Ubuntu Logic (Grub Reboot)
+                # 1. Grub Reboot 설정
+                cmd_grub = cmd + ['sudo', 'grub-reboot', '4']
+            
+                # Process execution with pipe handling for cleaner error capture
+                try:
+                    result = subprocess.run(cmd_grub, check=True, capture_output=True, timeout=10)
+                    st.toast("GRUB entry set for Windows!")
+                except subprocess.CalledProcessError as e:
+                    error_msg = e.stderr.decode().strip() if e.stderr else str(e)
+                    if "password is required" in error_msg or "sudo: a terminal is required" in error_msg:
+                        st.error("❌ sudo 권한 설정 필요")
+                        st.code(f"echo '{self.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/grub-reboot, /usr/sbin/reboot' | sudo tee /etc/sudoers.d/pc_control", language="bash")
+                        st.info("대상 PC에서 위 명령어를 한 번 실행해주세요.")
+                        return # 더 이상 진행하지 않음
+                    else:
+                        raise e # 다른 에러는 상위로 전파
+
+                # 2. Reboot 실행
+                # Reboot 시 연결이 끊겨서 에러가 날 수 있으므로 예외 처리 완화
+                cmd_reboot = cmd + ['sudo', 'reboot']
+                try:
+                    subprocess.run(cmd_reboot, check=True, capture_output=True, timeout=10)
+                except subprocess.CalledProcessError:
+                    # reboot은 성공했지만 연결이 끊어진 경우 무시 (또는 실제 에러일 수도 있음)
+                    pass
+                except subprocess.TimeoutExpired:
+                    # 타임아웃은 명령이 실행되었음을 의미할 수 있음
+                    pass
+
+                st.toast("Reboot Command Sent!")
+                # 종료/재부팅 모드 진입
+                self._update_state("booting_win", time.time())
+                st.session_state[self.key_last_check] = 0
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.decode().strip() if e.stderr else str(e)
+            st.error(f"Failed: {error_msg}")
+        except Exception as e:
+            st.error(f"Failed: {e}")
 
 

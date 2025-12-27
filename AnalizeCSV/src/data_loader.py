@@ -46,7 +46,14 @@ def load_db(config, start_date, end_date):
         connector = MariaDBConnector()
         # Use DB name from config if provided, allowing flexibility (or default to Env)
         target_db = config.get('database') 
-        conn = connector.get_connection(db_name=target_db)
+        conn = connector.get_connection(
+            db_name=target_db,
+            host=config.get('host'),
+            port=config.get('port'),
+            user=config.get('user'),
+            password=config.get('password'),
+            use_dict_cursor=False
+        )
         
         # 쿼리 실행
         table = config['table']
