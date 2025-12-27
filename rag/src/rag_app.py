@@ -24,6 +24,8 @@ import chromadb
 import pandas as pd
 import pymysql # Added for ID Backtracking
 from sentence_transformers import SentenceTransformer
+from shared.db.mariadb import MariaDBConnector
+from shared.llm.client import LLMClient as SharedLLMClient
 
 # --- API Helper Functions ---
 def call_openai_api(model, messages, api_key):
@@ -125,11 +127,9 @@ MARIADB_DB = os.getenv("MARIADB_DB", "rag_diary_db")
 def get_full_document_from_mariadb(table_name, source_id):
     """Fetches the full content from MariaDB using the source ID."""
     try:
-        conn = pymysql.connect(
-            host=MARIADB_HOST, user=MARIADB_USER, password=MARIADB_PASSWORD, database=MARIADB_DB,
-            charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=5
-        )
+        # Use Shared Connector
+        conn = MariaDBConnector().get_connection() 
+        # Shared connector returns dict cursor by default
         with conn.cursor() as cursor:
             st.caption(f"🔍 Fetching valid doc from MariaDB: {source_id}") # Debug Log
             cursor.execute(f"SELECT * FROM {table_name} WHERE uuid = %s", (source_id,))
@@ -778,84 +778,55 @@ with tab4:
                         full_response = ""
                         
                         try:
-                            if selected_provider in provider_map:
-                                p_config = provider_map[selected_provider]
-                                p_type = p_config.get('type', 'ollama')
-                                p_url = p_config['url']
-                                
-                                if p_type == 'ollama':
-                                    # Call Ollama API Directly
-                                    # Ensure URL ends with /api/chat
-                                    target_url = p_url
-                                    if not target_url.endswith("/api/chat"):
-                                        target_url = f"{target_url.rstrip('/')}/api/chat"
-                                        
-                                    payload = {
-                                        "model": selected_model,
-                                        "messages": messages,
-                                        "stream": True
-                                    }
-                                    r = requests.post(target_url, json=payload, stream=True, timeout=120)
-                                    r.raise_for_status()
-                                    for line in r.iter_lines():
-                                        if line:
-                                            body = json.loads(line)
-                                            if "message" in body:
-                                                content = body["message"].get("content", "")
-                                                full_response += content
-                                                response_placeholder.markdown(full_response + "▌")
-                                    response_placeholder.markdown(full_response)
-                                    
-                                elif p_type == 'openai':
-                                    # OpenAI Compatible (Local)
-                                    # We can reuse call_openai_api but need to direct it to p_url and mock key
-                                    # However call_openai_api has hardcoded URL. Let's make a mini inline version or modify usage.
-                                    # Better to just implement here for clarity.
-                                    
-                                    # Ensure URL ends with /v1/chat/completions (usually)
-                                    # Use logic: p_url usually is base (e.g. .../v1). 
-                                    target_url = f"{p_url.rstrip('/')}/chat/completions"
-                                    
-                                    headers = {
-                                        "Authorization": "Bearer local",
-                                        "Content-Type": "application/json"
-                                    }
-                                    payload = {
-                                        "model": selected_model,
-                                        "messages": messages,
-                                        "stream": True
-                                    }
-                                    r = requests.post(target_url, headers=headers, json=payload, stream=True, timeout=120)
-                                    r.raise_for_status()
-                                    
-                                    for line in r.iter_lines():
-                                        if line:
-                                            decoded = line.decode('utf-8')
-                                            if decoded.startswith("data: "):
-                                                if decoded == "data: [DONE]": break
-                                                try:
-                                                    chunk = json.loads(decoded[6:])
-                                                    if chunk['choices'] and chunk['choices'][0]['delta'].get('content'):
-                                                        c = chunk['choices'][0]['delta']['content']
-                                                        full_response += c
-                                                        response_placeholder.markdown(full_response + "▌")
-                                                except: pass
-                                    response_placeholder.markdown(full_response)
+                            # Determine Provider Config for Shared Client
+                            base_url = None
+                            target_api_key = api_key
+                            
+                            is_gemini = (selected_provider == "Gemini")
 
-                            elif selected_provider == "OpenAI":
-                                for chunk in call_openai_api(selected_model, messages, api_key):
-                                    full_response += chunk
-                                    response_placeholder.markdown(full_response + "▌")
-                                response_placeholder.markdown(full_response)
+                            if not is_gemini:
+                                if selected_provider in provider_map:
+                                    p_config = provider_map[selected_provider]
+                                    p_type = p_config.get('type', 'ollama')
+                                    raw_url = p_config['url'].rstrip('/')
+                                    
+                                    if p_type == 'ollama':
+                                        # Adapt Ollama to OpenAI Compatible Standard (/v1)
+                                        # Removes /api/chat or /api if present to get root, then add /v1
+                                        if raw_url.endswith("/api/chat"):
+                                            raw_url = raw_url.replace("/api/chat", "")
+                                        elif raw_url.endswith("/api"):
+                                            raw_url = raw_url.replace("/api", "")
+                                        
+                                        base_url = f"{raw_url}/v1"
+                                        target_api_key = "dummy" # Ollama local
+                                        
+                                    elif p_type == 'openai':
+                                        # Standard OpenAI Compatible
+                                        base_url = raw_url # Usually .../v1
+                                        target_api_key = "dummy"
+                                        
+                                elif selected_provider == "OpenAI":
+                                    base_url = "https://api.openai.com/v1"
+                                    # api_key is already set from env/input
                                 
-                            elif selected_provider == "Gemini":
-                                # Using Non-Stream for reliability first
-                                result = call_gemini_api_non_stream(selected_model, messages, api_key)
-                                full_response = result
+                                # Initialize Shared Client
+                                client = SharedLLMClient(base_url=base_url, api_key=target_api_key)
+                                
+                                # Stream Generation
+                                for chunk in client.generate(messages, selected_model, stream=True):
+                                     if chunk.startswith("Error:"):
+                                         st.error(chunk)
+                                         full_response += f"\n\n[System Error: {chunk}]"
+                                         break
+                                     full_response += chunk
+                                     response_placeholder.markdown(full_response + "▌")
                                 response_placeholder.markdown(full_response)
                                 
                             else:
-                                full_response = f"Provider {selected_provider} not yet implemented."
+                                # Gemini Legacy Fallback (Non-Stream for reliability)
+                                result = call_gemini_api_non_stream(selected_model, messages, target_api_key)
+                                full_response = result
                                 response_placeholder.markdown(full_response)
 
                         except Exception as e:

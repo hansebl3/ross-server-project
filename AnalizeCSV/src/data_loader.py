@@ -41,14 +41,12 @@ def load_db(config, start_date, end_date):
     end_dt = datetime.combine(end_date, datetime.max.time())
     
     try:
-        # DB 연결 설정
-        conn = pymysql.connect(
-            host=config['host'],
-            port=int(config['port']),
-            user=config['user'],
-            password=config['password'],
-            database=config['database']
-        )
+        # DB 연결 설정 (Shared Connector)
+        from shared.db.mariadb import MariaDBConnector
+        connector = MariaDBConnector()
+        # Use DB name from config if provided, allowing flexibility (or default to Env)
+        target_db = config.get('database') 
+        conn = connector.get_connection(db_name=target_db)
         
         # 쿼리 실행
         table = config['table']

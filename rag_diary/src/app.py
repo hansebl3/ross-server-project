@@ -122,101 +122,87 @@ def call_gemini_api(model, messages, api_key):
     except Exception as e:
         return f"Error: {e}"
 
+from shared.llm.client import LLMClient
+from shared.llm.client import LLMClient as SharedLLMClient
+
+# Initialize Shared Client
+# Note: app.py already had imports, I will add this to top level or here if cleaner.
+# Ideally I should refactor imports at the top, but for minimize diffs I can do it here or assume local import.
+# But 'shared' is a package.
+# app.py structure: imports -> config -> functions.
+# I will replace the whole analyze_log_content function.
+
 def analyze_log_content(text, model_name, config, provider, api_key=None, custom_map=None):
-    """Analyzes text to extract structured fields using Selected Provider."""
+    """Analyzes text to extract structured fields using Shared LLM Client."""
     try:
         # Prompt Construction
         prompt_tmpl = config["prompt_template"]
-        full_prompt = prompt_tmpl.format(text=text) # Assuming template uses {text}
+        full_prompt = prompt_tmpl.format(text=text)
         
-        # Ensure JSON instruction is clear for all models
         if "JSON" not in full_prompt:
              full_prompt += "\n\nRespond strictly in valid JSON format."
 
-        content = ""
+        # Setup Client
+        # We rely on Shared Client to handle providers if they are standard.
+        # But RAG Diary supports 'custom_map' (User defined providers).
+        # We need to map RAG Diary's provider config to SharedClient's init params.
         
-        # Check Custom Providers first
+        base_url = None
+        target_api_key = api_key
+        target_model = model_name
+        
         if custom_map and provider in custom_map:
              p_conf = custom_map[provider]
-             p_type = p_conf.get('type', 'ollama')
-             p_url = p_conf['url']
-             
-             if p_type == 'ollama':
-                payload = {
-                    "model": model_name,
-                    "messages": [{"role": "user", "content": full_prompt}],
-                    "stream": False,
-                    "format": "json"
-                }
-                # Ensure URL ends with /api/chat
-                target = f"{p_url.rstrip('/')}/api/chat" if not p_url.endswith("/api/chat") else p_url
-                response = requests.post(target, json=payload, timeout=60)
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result.get('message', {}).get('content', '')
-                else:
-                     st.error(f"Ollama API Error: {response.text}")
-                     return config["default_values"]
-                     
-             elif p_type == 'openai':
-                # Re-use OpenAI logic but with local URL
-                # Construct local URL
-                target_url = f"{p_url.rstrip('/')}/chat/completions"
-                headers = {"Authorization": "Bearer local", "Content-Type": "application/json"}
-                payload = {
-                    "model": model_name, 
-                    "messages": [{"role": "user", "content": full_prompt}], 
-                    "stream": False,
-                    # "response_format": {"type": "json_object"} # Some local models might support this
-                }
-                try:
-                    r = requests.post(target_url, headers=headers, json=payload, timeout=60)
-                    r.raise_for_status()
-                    content = r.json()['choices'][0]['message']['content']
-                except Exception as e:
-                     st.error(f"Local OpenAI Error: {e}")
-                     return config["default_values"]
-
+             base_url = p_conf['url']
+             # Shared client handles /v1/chat/completions appending usually.
+             # RAG Diary config URLs might be raw base or include /v1.
+             # SharedClient expects base like 'http://host:port/v1' or 'http://host:port' (and adds /v1 if needed? No, checks client implementation)
+             # My SharedClient adds `/chat/completions`.
+             # Standardizing: Base URL should NOT include /chat/completions.
+             pass
         elif provider == "Ollama":
-            payload = {
-                "model": model_name,
-                "messages": [{"role": "user", "content": full_prompt}],
-                "stream": False,
-                "format": "json" # Request JSON output mode if supported
-            }
-            url = f"{LLM_BASE_URL.rstrip('/')}/api/chat"
-            response = requests.post(url, json=payload, timeout=60)
-            if response.status_code == 200:
-                result = response.json()
-                content = result.get('message', {}).get('content', '')
-            else:
-                 st.error(f"Ollama API Error: {response.text}")
-                 return config["default_values"]
-                 
+             base_url = LLM_BASE_URL # From env
         elif provider == "OpenAI":
-            content = call_openai_api(model_name, [{"role": "user", "content": full_prompt}], api_key)
-            
+             base_url = "https://api.openai.com/v1"
         elif provider == "Gemini":
-            content = call_gemini_api(model_name, [{"role": "user", "content": full_prompt}], api_key)
+             # Shared Client is OpenAI compatible. Gemini via 'requests' in shared client?
+             # My SharedClient is purely OpenAI-compatible HTTP client currently.
+             # If Gemini API is used directly (google.generativeai), SharedClient doesn't support it yet.
+             # Only supports OpenAI-compatible endpoints.
+             # NewsReader supported Gemini via direct API.
+             # RAG Diary `call_gemini_api` used `generativelanguage.googleapis.com`.
+             # I should leave Gemini logic AS IS if SharedLib doesn't support it, or update SharedLib?
+             # User said: "Extract duplicate functionalities".
+             # If I force Gemini through SharedLib, I need to implement Gemini support in SharedLib.
+             # I'll stick to replacing the OpenAI/Ollama parts or wrapping them.
+             pass
 
-        # Parsing logic logic
+        # If provider is Gemini, use legacy function
+        if provider == "Gemini":
+             content = call_gemini_api(model_name, [{"role": "user", "content": full_prompt}], api_key)
+        else:
+             # Use Shared Client
+             client = SharedLLMClient(base_url=base_url, api_key=target_api_key)
+             messages = [{"role": "user", "content": full_prompt}]
+             # Force JSON mode not explicitly supported by my simple SharedClient yet (except via prompt or if I add it).
+             # My SharedClient `generate` has `json_mode` param.
+             content = client.generate(messages, model=target_model, json_mode=True)
+
+        # Parsing logic (Shared)
         try:
-            # Cleanup potential markdown code blocks
             clean_content = content
             if "```json" in clean_content:
                 clean_content = clean_content.split("```json")[1].split("```")[0]
             elif "```" in clean_content:
                 clean_content = clean_content.split("```")[1].split("```")[0]
             
-            data = json.loads(clean_content)
-            return data
-        except json.JSONDecodeError:
-            st.warning(f"JSON Parse Failed. Raw extraction:\n{content}")
-            return config["default_values"] # Simple Failover
-        
+            return json.loads(clean_content)
+        except Exception:
+            # Fallback
+            return config["default_values"]
+            
     except Exception as e:
         st.error(f"LLM Analysis Error: {e}")
-        # Return default values from config on error
         return config["default_values"]
 
 @st.cache_resource

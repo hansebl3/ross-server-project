@@ -3,7 +3,7 @@ from modules.llm_manager import LLMManager
 from modules.metrics_manager import DataUsageTracker
 import requests
 from bs4 import BeautifulSoup
-import mysql.connector
+from shared.db.mariadb import MariaDBConnector
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -114,14 +114,13 @@ class NewsDatabase:
     def _create_database(self):
         """데이터베이스가 존재하지 않으면 생성합니다."""
         try:
-            # 데이터베이스 없이 연결
-            conn = mysql.connector.connect(
-                host=self.db_config['host'],
-                user=self.db_config['user'],
-                password=self.db_config['password']
-            )
+            # 데이터베이스 없이 연결 (Shared Connector support via db_name="")
+            conn = MariaDBConnector().get_connection(db_name="")
             cursor = conn.cursor()
-            db_name = self.db_config['database']
+            # Use Env Var or Config. Standard is Env Var MARIADB_DB.
+            # But just in case, use the one from config if loaded, else env.
+            db_name = os.getenv("MARIADB_DB", self.db_config.get('database', 'news_db'))
+            
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
             cursor.close()
             conn.close()
@@ -147,7 +146,8 @@ class NewsDatabase:
         if not conn: return None
         
         try:
-            cursor = conn.cursor(dictionary=True)
+            # Use shared connector cursor (DictCursor by default)
+            cursor = conn.cursor()
             cursor.execute("SELECT summary, model, created_at FROM tb_summary_cache WHERE link_hash = %s", (link_hash,))
             result = cursor.fetchone()
             cursor.close()
@@ -190,8 +190,8 @@ class NewsDatabase:
             conn.commit()
             
             # 간단한 정리: 최근 100개 항목만 유지
-            cursor.execute("SELECT count(*) FROM tb_summary_cache")
-            count = cursor.fetchone()[0]
+            cursor.execute("SELECT count(*) as cnt FROM tb_summary_cache")
+            count = cursor.fetchone()['cnt']
             if count > 100:
                 # 가장 오래된 항목 삭제
                 delete_query = """
@@ -214,17 +214,7 @@ class NewsDatabase:
 
     def get_connection(self):
         """데이터베이스 연결을 설정하고 반환합니다."""
-        try:
-            conn = mysql.connector.connect(
-                host=self.db_config['host'],
-                user=self.db_config['user'],
-                password=self.db_config['password'],
-                database=self.db_config['database']
-            )
-            return conn
-        except mysql.connector.Error as err:
-            logger.error(f"DB Connection Error: {err}")
-            return None
+        return MariaDBConnector().get_connection()
 
     def save_article(self, article):
         """
@@ -264,7 +254,7 @@ class NewsDatabase:
             cursor.execute(query, values)
             conn.commit()
             return True
-        except mysql.connector.Error as err:
+        except Exception as err:
             logger.error(f"Save Error: {err}")
             return False
         finally:
@@ -280,7 +270,7 @@ class NewsDatabase:
             return []
         
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor()
             cursor.execute("SELECT * FROM tb_news ORDER BY created_at DESC")
             return cursor.fetchall()
         finally:

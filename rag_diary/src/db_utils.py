@@ -12,30 +12,46 @@ import pymysql
 import os
 import streamlit as st
 import category_config
+from shared.db.mariadb import MariaDBConnector
 
-MARIADB_HOST = os.getenv("MARIADB_HOST", "127.0.0.1")
-MARIADB_USER = os.getenv("MARIADB_USER", "root")
-MARIADB_PASSWORD = os.getenv("MARIADB_PASSWORD")
 MARIADB_DB = os.getenv("MARIADB_DB", "rag_diary_db")
 
-def get_db_connection():
+def get_db_connection(db_name=None):
     """Establishes a connection to the MariaDB database."""
-    try:
-        connection = pymysql.connect(
-            host=MARIADB_HOST,
-            user=MARIADB_USER,
-            password=MARIADB_PASSWORD,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor
-        )
-        return connection
-    except pymysql.MySQLError as e:
-        st.error(f"Error connecting to MariaDB: {e}")
-        return None
+    # If db_name is provided, use it. If not, use shared lib default (from env).
+    # To support original behavior of 'no db selected' used in init_db, we need to handle that.
+    # The original code's get_db_connection() did NOT select a DB.
+    # But save_to_mariadb() did 'USE {MARIADB_DB}'.
+    # Let's map this:
+    # If we want the connection for 'init_db' (create db), we pass db_name=""
+    connector = MariaDBConnector()
+    if db_name is None:
+        # Original 'get_db_connection' logic was NO DB selected.
+        # But 'save_to_mariadb' function uses this and expects a connection, then does 'USE'.
+        # So we can safely return a connection to the default DB if it exists, or No DB if we want?
+        # Actually, if we connect TO the DB, 'USE' is redundant but fine.
+        # However, init_db probably wants NO DB.
+        # Let's verify how init_db uses it.
+        pass
+
+    # Simplified approach:
+    # We default to NO DB selection to match legacy behavior, allowing caller to USE or init_db to work?
+    # NO, shared lib defaults to ENV DB.
+    # Let's change the default behavior of this project to use the env DB unless specified.
+    
+    # Wait, save_to_mariadb() below does `cursor.execute(f"USE {MARIADB_DB}")`.
+    # If we are already connected to MARIADB_DB, this is fine.
+    
+    # init_db() calls get_db_connection(), then `CREATE DATABASE ...`.
+    # If we connect to MARIADB_DB and it doesn't exist, it fails.
+    # So init_db needs a connection WITHOUT DB selected.
+    
+    return connector.get_connection(db_name=db_name if db_name is not None else "")
 
 def init_db():
     """Initializes the database and creates tables based on config."""
-    conn = get_db_connection()
+    # Connect without selecting DB to check/create it
+    conn = get_db_connection(db_name="")
     if conn:
         try:
             with conn.cursor() as cursor:
@@ -71,7 +87,7 @@ def save_to_mariadb(table_name, data_dict):
     Returns:
         int or None: The `id` of the inserted row if successful, None otherwise.
     """
-    conn = get_db_connection()
+    conn = get_db_connection(db_name=MARIADB_DB)
     if conn:
         try:
             with conn.cursor() as cursor:

@@ -5,7 +5,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # 라이브러리 설치 (requirements.txt 이용)
-COPY requirements.txt .
+COPY news-reader/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 시스템 패키지 설치 (wakeonlan, ssh, ping)
@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 소스 코드 복사
-# 소스 코드 복사 (모든 파일)
-COPY . .
+COPY shared /app/shared
+COPY news-reader .
 
 # 실행 명령어 (포트 8501)
 CMD ["streamlit", "run", "src/News_Reader.py", "--server.port=8503", "--server.address=0.0.0.0"]

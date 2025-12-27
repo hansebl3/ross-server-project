@@ -22,29 +22,26 @@ def load_config():
     return config
 
 def setup_database():
-    config = load_config()
-    db_config = config.get('news_db')
+    from shared.db.mariadb import MariaDBConnector
     
-    if not db_config:
-        logger.error("DB Config not found in config.json")
-        return
-
-    # MySQL 서버 연결 (미리 DB를 생성하기 위해 DB 지정 없이 연결)
+    config = load_config()
+    # db_config is used for db_name if needed, but shared connector uses ENV primarily.
+    # But let's keep db_name lookup from config as fallback if needed, or just rely on shared.
+    target_db = os.getenv("MARIADB_DB", config.get('news_db', {}).get('database', 'news_db'))
+    
     try:
-        conn = mysql.connector.connect(
-            host=db_config['host'],
-            user=db_config['user'],
-            password=db_config['password']
-        )
+        # Connect without DB to ensure creation
+        conn = MariaDBConnector().get_connection(db_name="")
         cursor = conn.cursor()
         
-        # 데이터베이스가 없으면 생성
-        db_name = db_config['database']
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-        logger.info(f"Database '{db_name}' check/creation completed.")
+        # Create DB
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {target_db}")
+        logger.info(f"Database '{target_db}' check/creation completed.")
         
-        # 특정 데이터베이스에 연결
-        conn.database = db_name
+        # Connect to Specific DB
+        # Re-connect or use USE? 
+        # Shared connector doesn't switch DB easily on existing conn, but we can execute USE.
+        cursor.execute(f"USE {target_db}")
         
         # 테이블 생성
         create_table_query = """
@@ -67,7 +64,7 @@ def setup_database():
         conn.close()
         logger.info("Database setup finished successfully.")
         
-    except mysql.connector.Error as err:
+    except Exception as err:
         logger.error(f"Error: {err}")
 
 if __name__ == "__main__":

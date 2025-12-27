@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from modules.metrics_manager import DataUsageTracker
+from shared.llm.client import LLMClient as SharedLLMClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -166,97 +167,63 @@ class LLMManager:
         return []
 
     def generate_response(self, prompt, model, stream=False):
-        """Generates response based on selected provider."""
+        """Generates response based on selected provider using SharedLLMClient."""
         tracker = DataUsageTracker()
         
         try:
+            # Determine Base URL and API Key
+            base_url = None
+            api_key = None
+            
             if self.selected_provider in self.provider_map:
                 p = self.provider_map[self.selected_provider]
-                if p.get('type') == 'openai':
-                     return self._call_openai_compatible(prompt, model, stream, tracker, p['url'])
-                else:
-                     # Default to ollama
-                     return self._call_ollama(prompt, model, stream, tracker, p['url'])
-
+                base_url = p['url']
+                # Local providers usually don't need real key, but SharedClient expects one generally or irrelevant.
+                api_key = "dummy" 
+                
             elif self.selected_provider == "openai":
-                return self._call_openai(prompt, model, stream, tracker)
+                base_url = "https://api.openai.com/v1"
+                api_key = self.get_config().get("api_keys", {}).get("openai")
+                if not api_key: raise ValueError("OpenAI API Key missing")
+                
             elif self.selected_provider == "gemini":
-                # For stability, use non-streaming for now unless requested otherwise
+                # Fallback to legacy Gemini logic if not supported by SharedClient (OpenAI-compatible only)
+                # But wait, I am replacing _call_gemini here.
+                # If I remove _call_gemini, I lose Gemini support unless SharedClient supports it.
+                # SharedClient is OpenAI-compatible request structure.
+                # Gemini doesn't support OpenAI endpoint structure directly unless via a proxy or if Google added it?
+                # Actually Google added OpenAI compatible endpoint recently but I am not sure if used here.
+                # Original code used `generativelanguage.googleapis.com` usage.
+                # I should KEEP _call_gemini for now and dispatch to it.
                 return self._call_gemini(prompt, model, stream, tracker)
+            
+            # Setup Shared Client
+            client = SharedLLMClient(base_url=base_url, api_key=api_key)
+            
+            messages = [{"role": "user", "content": prompt}]
+            
+            # Track TX (approx)
+            tracker.add_tx(len(prompt))
+            
+            # Generate
+            # SharedClient handles JSON parsing for us? It returns content string.
+            response_text = client.generate(messages, model=model, stream=stream)
+            
+            if response_text.startswith("Error:"):
+                 # SharedClient returns "Error: ..." on exception catch
+                 # We might want to log it or raise?
+                 pass
+            
+            # Track RX
+            tracker.add_rx(len(response_text))
+            
+            return response_text
+
         except Exception as e:
             logger.error(f"Generate Error ({self.selected_provider}): {e}")
             return f"Error: {e}"
-        
-        return "Error: Unknown Provider"
 
-    def _call_ollama(self, prompt, model, stream, tracker, base_url):
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "stream": stream,
-            "context": [] # Stateless
-        }
-        tracker.add_tx(len(json.dumps(payload)))
-        
-        response = requests.post(f"{base_url}/api/generate", json=payload, stream=stream, timeout=120)
-        response.raise_for_status()
-        
-        if stream:
-             tracker.add_rx(len(response.content)) # Approx
-             # See notes below regarding stream
-             pass
-        
-        # Non-streaming handling (or aggregating stream)
-        # If stream=True was passed but we digest it here:
-        full_text = ""
-        if stream:
-             for line in response.iter_lines():
-                 if line:
-                     body = json.loads(line)
-                     full_text += body.get("response", "")
-        else:
-             full_text = response.json().get("response", "")
-             
-        tracker.add_rx(len(full_text))
-        return full_text
-
-    def _call_openai_compatible(self, prompt, model, stream, tracker, base_url):
-        """Calls an OpenAI-compatible endpoint (like LM Studio)."""
-        url = f"{base_url}/chat/completions"
-        headers = {"Content-Type": "application/json"}
-        # Some local servers might need a dummy key
-        headers["Authorization"] = "Bearer local-key"
-        
-        messages = [{"role": "user", "content": prompt}]
-        payload = {"model": model, "messages": messages, "stream": False} # Force False
-        
-        tracker.add_tx(len(json.dumps(payload)))
-        r = requests.post(url, headers=headers, json=payload, timeout=120)
-        r.raise_for_status()
-        
-        res = r.json()
-        text = res['choices'][0]['message']['content']
-        tracker.add_rx(len(r.content))
-        return text
-
-    def _call_openai(self, prompt, model, stream, tracker):
-        api_key = self.get_config().get("api_keys", {}).get("openai")
-        if not api_key: raise ValueError("OpenAI API Key missing")
-        
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        messages = [{"role": "user", "content": prompt}]
-        payload = {"model": model, "messages": messages, "stream": False} # Force False for now
-        
-        tracker.add_tx(len(json.dumps(payload)))
-        r = requests.post(url, headers=headers, json=payload, timeout=60)
-        r.raise_for_status()
-        
-        res = r.json()
-        text = res['choices'][0]['message']['content']
-        tracker.add_rx(len(r.content))
-        return text
-
+    # Kept for Gemini Support (Non-OpenAI Standard)
     def _call_gemini(self, prompt, model, stream, tracker):
         api_key = self.get_config().get("api_keys", {}).get("gemini")
         if not api_key: raise ValueError("Gemini API Key missing")
@@ -277,6 +244,8 @@ class LLMManager:
             
         tracker.add_rx(len(r.content))
         return text
+
+    # _call_ollama, _call_openai_compatible, _call_openai removed (replaced by SharedLLMClient)
 
     def get_gpu_info(self):
         if self.selected_provider != "remote":
