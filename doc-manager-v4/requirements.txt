@@ -1,0 +1,16 @@
+# Core Logic
+watchdog
+uuid6
+python-dotenv
+
+# Database
+psycopg2-binary
+pgvector
+
+# AI/ML
+openai  # For OpenAI-compatible API (llama.cpp/ollama)
+
+# Monitoring UI
+streamlit
+pandas
+sentence-transformers
