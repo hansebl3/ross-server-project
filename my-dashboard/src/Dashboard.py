@@ -34,25 +34,10 @@ st.markdown("### 🚀 Applications")
 col_nav1, col_nav2 = st.columns(2)
 
 with col_nav1:
-    st.link_button("📰 News Reader", "http://ross-server:8503", use_container_width=True)
+    st.link_button("📊 CSV Analyzer", "http://ross-server:8502", use_container_width=True)
     
 with col_nav2:
-    st.link_button("📊 CSV Analyzer", "http://ross-server:8502", use_container_width=True)
-
-# Row 2
-col_nav3, col_nav4 = st.columns(2)
-
-with col_nav3:
-    st.link_button("🛠️ RAG Workbench", "http://ross-server:8504", use_container_width=True)
-
-with col_nav4:
-    st.link_button("📔 RAG Diary", "http://ross-server:8510", use_container_width=True)
-
-# Row 3
-col_nav5, col_nav6 = st.columns(2)
-
-with col_nav5:
-    st.link_button("📑 Doc Manager", "http://ross-server:8505", use_container_width=True)
+    st.empty()
 
 st.markdown("---")
 

@@ -1,16 +1,12 @@
 version: '3.8'
 
 # Unified Docker Compose for Ross Dashboard System
-# Created to orchestrate all sub-projects from a single root.
 # Usage: docker compose up -d --build
 
 services:
   # ----------------------------------------------------------------
   # 1. Main Dashboard (Port 8501)
   # ----------------------------------------------------------------
-  # The central hub linking to all other apps.
-  # - Mounts SSH keys for server control features.
-  # - Uses host network to access other services easily.
   dashboard:
     build:
       context: .
@@ -23,16 +19,15 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Seoul
-      - MARIADB_HOST=${MARIADB_HOST}
-      - MARIADB_USER=${MARIADB_USER}
-      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
-      - MARIADB_DB=${MARIADB_DB}
+      # Linking to Postgres now (Dashboard doesn't use DB directly yet but good to have)
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
 
   # ----------------------------------------------------------------
   # 2. Analize CSV (Port 8502)
   # ----------------------------------------------------------------
-  # Streamlit app for analyzing CSV and DB time-series data.
-  # - Override default Streamlit port (8501) to 8502 to avoid conflict.
   analize-csv:
     build:
       context: .
@@ -53,130 +48,20 @@ services:
       - MARIADB_DB=${MARIADB_DB}
 
   # ----------------------------------------------------------------
-  # 3. News Reader (Port 8503)
+  # 3. PostgreSQL Service (Port 5432)
   # ----------------------------------------------------------------
-  # Real-time news aggregation and LLM summarization.
-  news-reader:
-    build:
-      context: .
-      dockerfile: news-reader/Dockerfile
-    container_name: ross-news-reader
-    network_mode: "host"
-    volumes:
-      - ./news-reader:/app
-      - ~/.ssh:/root/.ssh:ro
-      - ./shared:/app/shared
-    restart: unless-stopped
-    environment:
-      - TZ=Asia/Seoul
-      - PYTHONPATH=/app
-      - MARIADB_HOST=${MARIADB_HOST}
-      - MARIADB_USER=${MARIADB_USER}
-      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
-      - MARIADB_DB=${MARIADB_DB}
-
-  # ----------------------------------------------------------------
-  # 4. RAG Workbench (Port 8504)
-  # ----------------------------------------------------------------
-  # Testing tool for Vector DB search and RAG output quality.
-  # - Modified: Injects DB connection info (host=127.0.0.1) to fix fallback IP issues.
-  rag-workbench:
-    build:
-      context: .
-      dockerfile: rag/Dockerfile
-    container_name: ross-rag-workbench
-    network_mode: "host"
-    volumes:
-      - ./rag:/app
-      - ./shared:/app/shared
-    restart: unless-stopped
-    environment:
-      - PYTHONPATH=/app
-      - TZ=Asia/Seoul
-      # Database connection settings (Connects to local 'mariadb' service)
-      # Database connection settings (Connects to local 'mariadb' service)
-      - MARIADB_HOST=${MARIADB_HOST}
-      - MARIADB_USER=${MARIADB_USER}
-      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
-      - MARIADB_DB=${MARIADB_DB}
-      - CHROMA_HOST=${CHROMA_HOST}
-      - CHROMA_PORT=${CHROMA_PORT}
-
-  # ----------------------------------------------------------------
-  # 5. RAG Diary (Port 8510)
-  # ----------------------------------------------------------------
-  # Daily logging system with auto-summarization and dual-save (SQL+Vector).
-  rag-diary:
-    build:
-      context: .
-      dockerfile: rag_diary/Dockerfile
-    container_name: ross-rag-diary
-    network_mode: "host"
-    volumes:
-      - ./rag_diary:/app
-      - ./shared:/app/shared
-    environment:
-      - PYTHONPATH=/app
-      - MARIADB_HOST=${MARIADB_HOST}
-      - MARIADB_USER=${MARIADB_USER}
-      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
-      - MARIADB_DB=${MARIADB_DB}
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - CHROMA_HOST=${CHROMA_HOST}
-      - CHROMA_PORT=${CHROMA_PORT}
-      - TZ=Asia/Seoul
-    restart: unless-stopped
-
-  # ----------------------------------------------------------------
-  # 6. MariaDB Service
-  # ----------------------------------------------------------------
-  # Shared database for RAG Diary and RAG Workbench.
-  # - Uses 'host' network mode to listen on port 3306 of the server.
-  mariadb:
-    image: mariadb:latest
-    container_name: ross-mariadb
+  postgres:
+    image: postgres:15
+    container_name: ross-postgres
     network_mode: "host"
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=${MARIADB_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
       - TZ=Asia/Seoul
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-
-  # ----------------------------------------------------------------
-  # 7. ChromaDB Service (Port 8001)
-  # ----------------------------------------------------------------
-  # Local Vector DB for RAG applications.
-  # - Accessible at localhost:8001 (Mapped from container port 8000)
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: ross-chromadb
-    ports:
-      - "8001:8000"
-    volumes:
-      - ./chroma_data:/data
-    environment:
-      - IS_PERSISTENT=TRUE
-    restart: unless-stopped
-
-  # ----------------------------------------------------------------
-  # 8. Documentation App (Port 8505)
-  # ----------------------------------------------------------------
-  doc-manager:
-    build:
-      context: .
-      dockerfile: doc-manager/Dockerfile
-    container_name: ross-doc-manager
-    network_mode: "host"
-    volumes:
-      - ./doc-manager:/app
-      - ./embed:/app/embed
-      - ./shared:/app/shared
-    restart: unless-stopped
-    environment:
-      - PYTHONPATH=/app
-      - TZ=Asia/Seoul
 
 volumes:
-  mariadb_data:
+  postgres_data:

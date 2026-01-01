@@ -16,15 +16,15 @@ class PostgresConnector:
         self.password = os.getenv("POSTGRES_PASSWORD")
         self.db_name = os.getenv("POSTGRES_DB", "doc_manager_db")
 
-    def get_connection(self):
-        """Returns a psycopg2 connection."""
+    def get_connection(self, host=None, port=None, user=None, password=None, db_name=None):
+        """Returns a psycopg2 connection. Allows overriding defaults."""
         try:
             conn = psycopg2.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                password=self.password,
-                dbname=self.db_name
+                host=host or self.host,
+                port=port or self.port,
+                user=user or self.user,
+                password=password or self.password,
+                dbname=db_name or self.db_name
             )
             return conn
         except Exception as e:

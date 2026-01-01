@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-.env
-.ipynb_checkpoints/
-rag_settings.json
-Data/
-src/llm_config.json
